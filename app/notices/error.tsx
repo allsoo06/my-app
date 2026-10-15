@@ -25,7 +25,7 @@ export default function NoticesError({
       </p>
       <button
         onClick={() => reset()}
-        className="rounded-md border border-black/[8] px-4 py-2 text-sm hover:bg-black/[3] dark:border-white/[.145] dark:hover:bg-white/[5]"
+        className="rounded-md border border-black/[.08] px-4 py-2 text-sm hover:bg-black/[.03] dark:border-white/[.145] dark:hover:bg-white/[.05]"
       >
         다시 시도
       </button>

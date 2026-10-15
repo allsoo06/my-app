@@ -16,7 +16,7 @@ export default async function ProductsPage() {
           <li key={p.id}>
             <Link
               href={`/products/${p.id}`}
-              className="block rounded-lg border border-black/8 px-5 py-4 transition-colors hover:bg-black/[.03] dark:border-white/[.145] dark:hover:bg-white/[.05]"
+              className="block rounded-lg border border-black/[.08] px-5 py-4 transition-colors hover:bg-black/[.03] dark:border-white/[.145] dark:hover:bg-white/[.05]"
             >
               <p className="font-medium text-black dark:text-zinc-50">
                 {p.name}

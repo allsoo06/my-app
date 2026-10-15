@@ -24,7 +24,7 @@ export default function NewNoticePage() {
             name="title"
             type="text"
             required
-            className="rounded-md border border-black/8 px-3 py-2 text-sm outline-none focus:border-zinc-400 dark:border-white/[.145] dark:bg-transparent"
+            className="rounded-md border border-black/[.08] px-3 py-2 text-sm outline-none focus:border-zinc-400 dark:border-white/[.145] dark:bg-transparent"
           />
         </div>
         <div className="flex flex-col gap-1.5">
@@ -39,7 +39,7 @@ export default function NewNoticePage() {
             name="author"
             type="text"
             required
-            className="rounded-md border border-black/8 px-3 py-2 text-sm outline-none focus:border-zinc-400 dark:border-white/[.145] dark:bg-transparent"
+            className="rounded-md border border-black/[.08] px-3 py-2 text-sm outline-none focus:border-zinc-400 dark:border-white/[.145] dark:bg-transparent"
           />
         </div>
         <div className="flex flex-col gap-1.5">
@@ -54,7 +54,7 @@ export default function NewNoticePage() {
             name="content"
             rows={6}
             required
-            className="resize-none rounded-md border border-black/8 px-3 py-2 text-sm outline-none focus:border-zinc-400 dark:border-white/[.145] dark:bg-transparent"
+            className="resize-none rounded-md border border-black/[.08] px-3 py-2 text-sm outline-none focus:border-zinc-400 dark:border-white/[.145] dark:bg-transparent"
           />
         </div>
         <SubmitButton label="등록하기" />
