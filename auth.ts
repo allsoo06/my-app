@@ -3,15 +3,25 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/mongodb";
 import { User } from "@/models/User";
+import { authConfig } from "./auth.config";
 
-// Auth.js(NextAuth) v5 설정 파일입니다. 관례상 프로젝트 루트에 둡니다 —
-// middleware.ts 등 여러 곳에서 이 파일의 auth()를 그대로 불러 쓰기 위해서입니다.
+// Auth.js(NextAuth) v5 설정 파일입니다. 관례상 프로젝트 루트에 둡니다.
 //
-// Credentials Provider = "우리 DB의 이메일/비밀번호로 직접 로그인"하는 방식입니다.
-// (2주차에 소개했던 Clerk 같은 외부 인증 서비스와 달리, 로그인 로직을 직접 작성합니다.)
-// 세션은 데이터베이스가 아니라 서명된 JWT 쿠키로 관리합니다 — Credentials Provider를
-// 쓸 때 Auth.js의 기본 방식입니다.
+// auth.config.ts의 "가벼운" 설정에, 실제 로그인 로직(Credentials Provider)과
+// role을 세션에 옮겨 담는 콜백을 더한 "완전한" 버전입니다. 이 파일은
+// Server Component / Server Action / Route Handler처럼 Node.js 런타임에서
+// 실행되는 곳에서만 import합니다 — 미들웨어(Edge Runtime)에서는 이 파일이
+// 아니라 auth.config.ts를 직접 씁니다 (proxy.ts 참고).
+type UserDocLike = {
+  _id: unknown;
+  name: string;
+  email: string;
+  passwordHash: string;
+  role?: "user" | "admin";
+};
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   providers: [
     Credentials({
       credentials: {
@@ -30,23 +40,47 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!email || !password) return null;
 
         await connectDB();
-        const user = await User.findOne({ email: email.toLowerCase() });
+        const user = await User.findOne({
+          email: email.toLowerCase(),
+        }).lean<UserDocLike>();
         if (!user) return null; // 존재하지 않는 이메일
 
         // bcrypt.compare: 입력한 비밀번호를 다시 해싱해서 저장된 해시와 비교합니다.
-        // 해시를 복호화하는 게 아니라 "같은 입력이면 같은 해시가 나온다"는 원리를 씁니다.
         const isValid = await bcrypt.compare(password, user.passwordHash);
         if (!isValid) return null; // 비밀번호 불일치
 
         // 여기서 반환하는 값이 세션(JWT)에 담깁니다 — passwordHash는 절대 포함하지 않습니다.
-        return { id: String(user._id), name: user.name, email: user.email };
+        return {
+          id: String(user._id),
+          name: user.name,
+          email: user.email,
+          role: user.role ?? "user",
+        };
       },
     }),
   ],
-  pages: {
-    signIn: "/login",
-  },
   session: {
     strategy: "jwt",
+  },
+  callbacks: {
+    ...authConfig.callbacks,
+    // authorize()가 반환한 user는 로그인하는 그 순간에만 존재합니다.
+    // 그 정보를 jwt 토큰에 옮겨 담아둬야 이후 모든 요청에서 재사용됩니다.
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        token.role = (user as { role?: "user" | "admin" }).role ?? "user";
+      }
+      return token;
+    },
+    // 토큰의 내용을 실제로 화면 코드가 쓰는 session.user에 옮겨 담습니다.
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = String(token.id);
+        session.user.role =
+          (token.role as "user" | "admin" | undefined) ?? "user";
+      }
+      return session;
+    },
   },
 });
