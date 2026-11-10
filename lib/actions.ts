@@ -7,17 +7,121 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
-import { likeProduct as likeProductInDb } from "@/lib/products";
+import { getProduct, getProductsByIds, decrementStock } from "@/lib/products";
+import {
+  addToCart,
+  updateCartQty,
+  removeFromCart,
+  getCartLines,
+  clearCart,
+} from "@/lib/cart";
+import { createOrder } from "@/lib/orders";
 import { createNotice, deleteNotice, getNotice } from "@/lib/notices";
 import { createUser } from "@/lib/users";
 import { signIn, signOut, auth } from "@/auth";
 
-export async function likeProductAction(id: string) {
-  const newLikes = await likeProductInDb(id);
-  // 이 경로를 다시 그리도록 Next.js에 알려줍니다 — 다른 탭/새로고침에서도
-  // 최신 좋아요 수가 보이게 합니다.
-  revalidatePath(`/products/${id}`);
-  return newLikes;
+// 10주차부터 상품 목록/상세 페이지는 "좋아요" 대신 실제 장바구니 담기를
+// 지원합니다. 폼에서 넘어온 수량(qty)을 그대로 믿지 않고, 실제 재고를
+// 다시 조회해서 그 범위 안으로 맞춥니다 — "클라이언트가 보낸 값은 항상
+// 조작될 수 있다"는 9주차의 교훈이 장바구니에도 그대로 적용됩니다.
+export async function addToCartAction(formData: FormData) {
+  const productId = String(formData.get("productId") ?? "");
+  const requestedQty = Math.max(1, Number(formData.get("qty") ?? 1) || 1);
+  if (!productId) {
+    throw new Error("잘못된 상품입니다.");
+  }
+
+  const product = await getProduct(productId);
+  if (!product || product.stock === 0) {
+    throw new Error("담을 수 없는 상품입니다.");
+  }
+
+  const qty = Math.min(requestedQty, product.stock);
+  await addToCart(productId, qty);
+
+  // 장바구니 개수 배지는 모든 페이지의 SiteHeader(루트 레이아웃)에 있으므로,
+  // 특정 경로가 아니라 레이아웃 자체를 다시 그리도록 알려줘야 합니다.
+  revalidatePath("/", "layout");
+}
+
+export async function updateCartQtyAction(formData: FormData) {
+  const productId = String(formData.get("productId") ?? "");
+  const requestedQty = Number(formData.get("qty") ?? 0);
+  if (!productId) {
+    throw new Error("잘못된 상품입니다.");
+  }
+
+  if (requestedQty <= 0) {
+    await removeFromCart(productId);
+  } else {
+    const product = await getProduct(productId);
+    const qty = product ? Math.min(requestedQty, product.stock) : requestedQty;
+    await updateCartQty(productId, qty);
+  }
+
+  revalidatePath("/", "layout");
+}
+
+export async function removeFromCartAction(formData: FormData) {
+  const productId = String(formData.get("productId") ?? "");
+  if (!productId) {
+    throw new Error("잘못된 상품입니다.");
+  }
+  await removeFromCart(productId);
+  revalidatePath("/", "layout");
+}
+
+// 11주차: 장바구니를 실제 주문으로 바꿉니다. 결제 대행사 연동은 이
+// 과목 범위 밖이므로 "결제하기"는 곧바로 주문을 만드는 것으로
+// 단순화합니다. 핵심은 결제 자체가 아니라, 아래 세 가지입니다.
+//
+// 1) 로그인하지 않으면 애초에 주문을 만들 수 없다 (인증)
+// 2) 가격/이름은 쿠키(클라이언트가 들고 있는 값)가 아니라 DB에서
+//    다시 조회해 채운다 (가격 변조 방지 — 10주차 lib/cart.ts와 같은 원칙)
+// 3) 주문에는 반드시 로그인한 사용자의 id가 서버에서 채워진다
+//    (다른 사람 이름으로 주문을 만들 수 없게)
+export async function checkoutAction() {
+  const session = await auth();
+  if (!session?.user) {
+    redirect("/login");
+  }
+
+  const lines = await getCartLines();
+  if (lines.length === 0) {
+    throw new Error("장바구니가 비어 있습니다.");
+  }
+
+  const products = await getProductsByIds(lines.map((line) => line.productId));
+  const items = lines
+    .map((line) => {
+      const product = products.find((p) => p.id === line.productId);
+      if (!product) return null;
+      // 재고를 다시 한 번 이 시점 기준으로 강제합니다 — 장바구니에
+      // 담아둔 사이 재고가 줄어들었을 수도 있습니다.
+      const qty = Math.min(line.qty, product.stock);
+      if (qty <= 0) return null;
+      return {
+        productId: product.id,
+        name: product.name,
+        price: product.price,
+        qty,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+
+  if (items.length === 0) {
+    throw new Error("주문할 수 있는 상품이 없습니다(품절되었을 수 있습니다).");
+  }
+
+  const order = await createOrder(session.user.id, items);
+  await Promise.all(
+    items.map((item) => decrementStock(item.productId, item.qty)),
+  );
+  await clearCart();
+
+  revalidatePath("/", "layout");
+  revalidatePath("/orders");
+  redirect(`/orders/${order.id}`);
 }
 
 // 9주차부터 이 액션은 로그인 여부를 직접 확인합니다. middleware.ts가
