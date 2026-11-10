@@ -215,7 +215,11 @@ export async function registerAction(formData: FormData) {
 // 삼켜버리면 로그인 성공 후 리다이렉트까지 막혀버립니다.
 export async function loginAction(formData: FormData) {
   try {
-    await signIn("credentials", formData);
+    // Vercel 배포 환경에서도 리다이렉트가 누락되지 않도록 redirectTo 옵션을 지정합니다.
+    await signIn("credentials", {
+      ...Object.fromEntries(formData),
+      redirectTo: "/",
+    });
   } catch (error) {
     if (error instanceof AuthError) {
       redirect("/login?error=1");
