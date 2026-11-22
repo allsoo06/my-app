@@ -36,6 +36,19 @@ export default async function NoticeDetailPage({ params }: Props) {
       <p className="text-sm text-zinc-500 dark:text-zinc-400">
         {notice.authorName} · {notice.createdAt}
       </p>
+      {/*
+        ✅ [13주차 · 수정] 12주차의 dangerouslySetInnerHTML을 제거했습니다.
+        돌이켜보면 애초에 필요하지 않았습니다 — "줄바꿈을 보여주고 싶다"는
+        요구사항은 HTML로 해석할 필요 없이 CSS의 white-space: pre-wrap
+        (Tailwind의 whitespace-pre-wrap)만으로 충분합니다. React가
+        {"{content}"}처럼 중괄호로 값을 렌더링하면 HTML 특수문자를 자동으로
+        이스케이프하므로, <script> 같은 값이 들어와도 문자 그대로 화면에
+        찍힐 뿐 실행되지 않습니다. "정말로" 사용자가 입력한 리치 텍스트를
+        HTML로 보여줘야 하는 경우라면 DOMPurify 같은 새니타이저로 위험한
+        태그/속성을 걸러낸 뒤에만 dangerouslySetInnerHTML을 써야 합니다 —
+        하지만 가장 안전한 수정은 애초에 그 API가 필요 없는 상황을
+        만드는 것입니다.
+      */}
       <p className="whitespace-pre-wrap leading-7 text-zinc-700 dark:text-zinc-300">
         {notice.content}
       </p>

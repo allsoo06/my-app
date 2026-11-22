@@ -20,6 +20,23 @@ type UserDocLike = {
   role?: "user" | "admin";
 };
 
+// ✅ [13주차 · 수정] "값이 없으면 하드코딩된 기본값을 쓴다"가 아니라
+// "값이 없으면 즉시, 명확하게 실패한다"로 바꿉니다. 이 함수가 던지는
+// 에러 메시지를 본 사람이 무엇을 해야 하는지 바로 알 수 있도록
+// `.env.local.example` 경로까지 안내합니다.
+function assertAuthSecret(): string {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) {
+    throw new Error(
+      "AUTH_SECRET 환경변수가 없습니다. `.env.local.example`을 참고해 `.env.local`을 만들고, " +
+        "`npx auth secret`으로 값을 채워주세요. (12주차처럼 코드에 기본값을 하드코딩하지 않습니다.)",
+    );
+  }
+  return secret;
+}
+
+const authSecret = assertAuthSecret();
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   providers: [
@@ -62,6 +79,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: {
     strategy: "jwt",
   },
+  // ✅ [13주차 · 수정] 12주차의 하드코딩된 폴백 시크릿을 제거했습니다.
+  // 대신 파일 맨 위의 assertAuthSecret()이 서버가 뜨는 시점에 바로
+  // 검사합니다 — AUTH_SECRET이 없으면 그 즉시 명확한 에러 메시지와 함께
+  // 서버가 죽습니다("fail fast"). "일단 기본값으로라도 동작하게" 만드는
+  // 것보다, "설정이 빠졌으면 아예 못 뜨게" 만드는 편이 훨씬 안전합니다 —
+  // 조용히 안전하지 않은 기본값으로 돌아가다가 그대로 배포되는 사고를
+  // 원천적으로 막기 때문입니다.
+  secret: authSecret,
   callbacks: {
     ...authConfig.callbacks,
     // authorize()가 반환한 user는 로그인하는 그 순간에만 존재합니다.
