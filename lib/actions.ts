@@ -18,6 +18,7 @@ import {
 import { createOrder } from "@/lib/orders";
 import { createNotice, deleteNotice, getNotice } from "@/lib/notices";
 import { createUser } from "@/lib/users";
+import { checkLoginRateLimit } from "@/lib/rateLimit";
 import { signIn, signOut, auth } from "@/auth";
 
 // 10주차부터 상품 목록/상세 페이지는 "좋아요" 대신 실제 장바구니 담기를
@@ -213,13 +214,24 @@ export async function registerAction(formData: FormData) {
 // AuthError만 따로 잡아서 /login?error=1 로 돌려보내고, 그 외의 에러
 // (Next.js의 리다이렉트 신호 포함)는 그대로 다시 던져야 합니다 — 여기서
 // 삼켜버리면 로그인 성공 후 리다이렉트까지 막혀버립니다.
+//
+// ✅ [14주차 · 신규] signIn을 호출하기 "전에" 먼저 Rate Limiting을
+// 검사합니다. 이렇게 하면 제한에 걸렸을 때는 DB 조회나 bcrypt.compare
+// 같은 비싼 작업을 아예 실행하지 않습니다 — 공격자에게 서버 자원을
+// 낭비하지 않는다는 의미도 있습니다. 식별자로는 입력된 이메일을
+// 씁니다(lib/rateLimit.ts의 주석 참고).
 export async function loginAction(formData: FormData) {
+  const email =
+    typeof formData.get("email") === "string"
+      ? String(formData.get("email"))
+      : "";
+  const { allowed, retryAfterSeconds } = checkLoginRateLimit(email);
+  if (!allowed) {
+    redirect(`/login?error=ratelimited&retry=${retryAfterSeconds}`);
+  }
+
   try {
-    // Vercel 배포 환경에서도 리다이렉트가 누락되지 않도록 redirectTo 옵션을 지정합니다.
-    await signIn("credentials", {
-      ...Object.fromEntries(formData),
-      redirectTo: "/",
-    });
+    await signIn("credentials", formData);
   } catch (error) {
     if (error instanceof AuthError) {
       redirect("/login?error=1");
